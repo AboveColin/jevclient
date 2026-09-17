@@ -10,9 +10,13 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      # src, not a path in args: the action appends the workspace to args, so a
+      # path there makes it check the whole checkout including the README.
       - uses: astral-sh/ruff-action@v3
         with:
-          args: check jevclient
+          args: check
+          src: ./jevclient
       - uses: astral-sh/ruff-action@v3
         with:
-          args: format --check jevclient
+          args: format --check
+          src: ./jevclient
