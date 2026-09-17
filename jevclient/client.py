@@ -91,7 +91,9 @@ class JevClient:
                 self._raise_for_status(response, body)
                 data = await response.json(content_type=None)
         except aiohttp.ClientError as err:
-            raise JevConnectionError(f"request to {self._base_url} failed: {err}") from err
+            raise JevConnectionError(
+                f"request to {self._base_url} failed: {err}"
+            ) from err
         except TimeoutError as err:
             raise JevConnectionError(
                 f"no answer from {self._base_url} within {self._timeout.total}s"

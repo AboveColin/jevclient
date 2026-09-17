@@ -179,7 +179,9 @@ def parse_answer(key: str, raw: Mapping[str, Any]) -> Answer:
             return ScoreAnswer(
                 score=float(raw["score"]),
                 legend={str(k): str(v) for k, v in raw.get("legend", {}).items()},
-                probabilities={str(k): float(v) for k, v in raw["probabilities"].items()},
+                probabilities={
+                    str(k): float(v) for k, v in raw["probabilities"].items()
+                },
                 confidence=float(raw["confidence"]),
             )
     except (KeyError, TypeError, ValueError) as err:
