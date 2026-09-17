@@ -9,6 +9,17 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from typing import Any
 
+# instructions and every criteria value accept a string, an object or an array. The
+# model is trained to read structure, so a schema or a database row can go in as JSON
+# rather than being flattened into a sentence first.
+type EntryType = str | Mapping[str, Any] | Sequence[Any] | None
+
+from .const import (
+    MAX_CHOICE_OPTIONS,
+    MAX_SCORE_LEVELS,
+    MIN_CHOICE_OPTIONS,
+    MIN_SCORE_LEVELS,
+)
 from .exceptions import JevResponseError
 
 
@@ -16,9 +27,9 @@ from .exceptions import JevResponseError
 class Noul:
     """A yes/no question. The answer is the probability that the answer is yes."""
 
-    instructions: str
-    true: str | None = None
-    false: str | None = None
+    instructions: EntryType
+    true: EntryType = None
+    false: EntryType = None
 
     def as_payload(self) -> dict[str, Any]:
         payload: dict[str, Any] = {"type": "noul", "instructions": self.instructions}
@@ -31,14 +42,14 @@ class Noul:
 class Choice:
     """Pick one option. `criteria` maps an option name to its rubric, or to None."""
 
-    instructions: str
-    criteria: Mapping[str, str | None]
+    instructions: EntryType
+    criteria: Mapping[str, EntryType]
 
     def __post_init__(self) -> None:
-        if len(self.criteria) < 2:
+        if not MIN_CHOICE_OPTIONS <= len(self.criteria) <= MAX_CHOICE_OPTIONS:
             raise ValueError(
-                f"a choice needs at least 2 options, got {len(self.criteria)}: "
-                f"{list(self.criteria)}"
+                f"a choice takes {MIN_CHOICE_OPTIONS} to {MAX_CHOICE_OPTIONS} "
+                f"options, got {len(self.criteria)}: {list(self.criteria)[:10]}"
             )
 
     def as_payload(self) -> dict[str, Any]:
@@ -53,14 +64,14 @@ class Choice:
 class Score:
     """Rate against ordered levels. The answer may fall between two levels."""
 
-    instructions: str
-    criteria: Sequence[str]
+    instructions: EntryType
+    criteria: Sequence[EntryType]
 
     def __post_init__(self) -> None:
-        if len(self.criteria) < 2:
+        if not MIN_SCORE_LEVELS <= len(self.criteria) <= MAX_SCORE_LEVELS:
             raise ValueError(
-                f"a score needs at least 2 levels, got {len(self.criteria)}: "
-                f"{list(self.criteria)}"
+                f"a score takes {MIN_SCORE_LEVELS} to {MAX_SCORE_LEVELS} levels, "
+                f"got {len(self.criteria)}: {list(self.criteria)}"
             )
 
     def as_payload(self) -> dict[str, Any]:
@@ -115,6 +126,17 @@ class ScoreAnswer:
     def nearest_level(self) -> str:
         """The description of the level the score is closest to."""
         return self.legend.get(str(round(self.score)), "")
+
+    @property
+    def normalized(self) -> float:
+        """The score as 0 to 1, whatever the number of levels.
+
+        A score runs from 0 to len(levels) - 1, so two rubrics of different lengths
+        are not comparable until they are divided by their own top level. Weighted
+        composites get this wrong constantly.
+        """
+        top = max(len(self.legend) - 1, 1)
+        return self.score / top
 
 
 Answer = NoulAnswer | ChoiceAnswer | ScoreAnswer

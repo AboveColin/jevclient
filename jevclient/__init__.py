@@ -6,7 +6,15 @@ with the full distribution) and Score (a rating against ordered levels).
 """
 
 from .client import JevClient
-from .const import DEFAULT_BASE_URL, DEFAULT_MODEL, USD_PER_MILLION_INPUT_TOKENS
+from .const import (
+    DEFAULT_BASE_URL,
+    DEFAULT_MODEL,
+    MAX_CHOICE_OPTIONS,
+    MAX_SCORE_LEVELS,
+    MIN_CHOICE_OPTIONS,
+    MIN_SCORE_LEVELS,
+    USD_PER_MILLION_INPUT_TOKENS,
+)
 from .exceptions import (
     JevAuthError,
     JevConnectionError,
@@ -20,6 +28,7 @@ from .models import (
     Answer,
     Choice,
     ChoiceAnswer,
+    EntryType,
     JevResponse,
     Noul,
     NoulAnswer,
@@ -29,15 +38,20 @@ from .models import (
     Usage,
 )
 
-__version__ = "1.0.0"
+__version__ = "1.1.0"
 
 __all__ = [
     "DEFAULT_BASE_URL",
     "DEFAULT_MODEL",
+    "MAX_CHOICE_OPTIONS",
+    "MAX_SCORE_LEVELS",
+    "MIN_CHOICE_OPTIONS",
+    "MIN_SCORE_LEVELS",
     "USD_PER_MILLION_INPUT_TOKENS",
     "Answer",
     "Choice",
     "ChoiceAnswer",
+    "EntryType",
     "JevAuthError",
     "JevClient",
     "JevConnectionError",
