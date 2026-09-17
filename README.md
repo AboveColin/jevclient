@@ -56,6 +56,12 @@ everything you want to know at once. It is not free in money: question text is
 billed as input tokens, roughly 38 for a short question, and output is billed at
 zero.
 
+Those figures are first calls on a cold connection. Over 16 calls from the same
+place, a warm connection answered in 250 to 580 ms.
+
+A choice takes 2 to 255 options and a score takes 2 to 10 levels. Both are checked
+locally, so a mistake costs no request.
+
 ## Install
 
 ```
