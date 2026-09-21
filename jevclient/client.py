@@ -30,6 +30,9 @@ StateType = str | Mapping[str, Any] | list[Any]
 class JevClient:
     """One client per API key.
 
+    `api_key` may be empty, for an endpoint that speaks this API and asks for no
+    credential. The Authorization header is then left off the request.
+
     Every question in a call is evaluated in isolation against the same state, and
     the API answers them in parallel. Measured 2026-09-17 from the Netherlands:
     3 questions took 712 ms and 100 took 714 ms, so batching questions into one
@@ -52,6 +55,15 @@ class JevClient:
         self._timeout = aiohttp.ClientTimeout(total=timeout)
         self._session = session
         self._owns_session = session is None
+
+    def _headers(self) -> dict[str, str]:
+        """The credential to send, when there is one.
+
+        An empty key means the endpoint needs none, and then it gets no header at
+        all. "Bearer " with nothing after it is not a credential: a server that
+        parses the header rather than ignoring it answers 400 or 401 to it.
+        """
+        return {"Authorization": f"Bearer {self._api_key}"} if self._api_key else {}
 
     async def _get_session(self) -> aiohttp.ClientSession:
         if self._session is None:
@@ -84,7 +96,7 @@ class JevClient:
             async with session.post(
                 f"{self._base_url}{SYSTEMONE_PATH}",
                 json=payload,
-                headers={"Authorization": f"Bearer {self._api_key}"},
+                headers=self._headers(),
                 timeout=self._timeout,
             ) as response:
                 body = await response.text()

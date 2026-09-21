@@ -71,6 +71,19 @@ pip install jevclient
 Requires Python 3.12 and aiohttp. Pass your own `aiohttp.ClientSession` if you have
 one, and the client will use it and leave closing it to you.
 
+## Another endpoint
+
+`base_url` points the client at something other than `https://api.typesafe.ai`, and
+`model` names the model to ask for. The client appends `/v1/systemone` to the base
+URL, so a path in it is kept as a prefix.
+
+An empty `api_key` sends no Authorization header, for an endpoint that asks for no
+credential:
+
+```python
+JevClient("", base_url="http://gateway.local:8093", model="systemone-small")
+```
+
 ## Errors
 
 `JevAuthError` (401), `JevValidationError` (422), `JevRateLimitError` (429, carries
