@@ -97,3 +97,10 @@ refused locally, before a request is spent on a 422.
 
 This is an independent client. See the [TypeSafe docs](https://docs.typesafe.ai) for
 the API itself.
+
+## Supporting the project
+
+This project is free and stays free. If it is useful to you, you can support its
+development through [GitHub Sponsors](https://github.com/sponsors/AboveColin).
+Sponsorship is voluntary and unlocks nothing: every feature, fix and security
+update ships in the public release.
