@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import time
 from collections.abc import Mapping
 from typing import Any, Self
@@ -142,7 +143,7 @@ class JevClient:
         status = response.status
         if status < 400:
             return
-        detail = body.strip()[:400]
+        detail = _api_message(body)
         if status == 401:
             raise JevAuthError(f"the API key was rejected: {detail}", status=status)
         # TypeSafe answered 400 to an unknown model and to an image of the wrong
@@ -219,3 +220,26 @@ def _strings(value: Any) -> list[str]:
     if isinstance(value, list | tuple):
         return [s for item in value for s in _strings(item)]
     return []
+
+
+def _api_message(body: str) -> str:
+    """The message out of an error body, or the body itself when it carries none.
+
+    TypeSafe answers {"detail": {"error_type": ..., "message": ...}}, measured on
+    2026-10-16 for a 400 and a 401. OpenRouter answers {"error": {"message": ...}},
+    measured for a 401 the same day. Anything else, such as a proxy's HTML page or a
+    validation list, comes through as it was, cut at 400 characters.
+    """
+    raw = body.strip()
+    try:
+        data = json.loads(raw)
+    except ValueError:
+        return raw[:400]
+    if isinstance(data, Mapping):
+        for key in ("detail", "error"):
+            value = data.get(key)
+            if isinstance(value, Mapping):
+                value = value.get("message")
+            if isinstance(value, str) and value.strip():
+                return value.strip()[:400]
+    return raw[:400]
