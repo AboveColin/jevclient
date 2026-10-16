@@ -5,6 +5,7 @@ Callers never index raw JSON: they build question objects and read answer object
 
 from __future__ import annotations
 
+import base64
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from typing import Any
@@ -15,7 +16,9 @@ from typing import Any
 type EntryType = str | Mapping[str, Any] | Sequence[Any] | None
 
 from .const import (
+    IMAGE_FORMATS,
     MAX_CHOICE_OPTIONS,
+    MAX_IMAGE_BYTES,
     MAX_SCORE_LEVELS,
     MIN_CHOICE_OPTIONS,
     MIN_SCORE_LEVELS,
@@ -82,7 +85,53 @@ class Score:
         }
 
 
-Question = Noul | Choice | Score
+@dataclass(slots=True)
+class Box:
+    """Where something is in an image. Needs Jev 1.14 or later and an image asset.
+
+    `instructions` names the target and the image, such as "the parcel in `door`".
+    A Box takes no criteria. It always answers with a box, even when the target is
+    absent, so ask a Noul beside it when the target may not be there.
+    """
+
+    instructions: EntryType
+
+    def as_payload(self) -> dict[str, Any]:
+        return {"type": "box", "instructions": self.instructions}
+
+
+Question = Noul | Choice | Score | Box
+
+
+@dataclass(slots=True)
+class Image:
+    """One PNG or JPEG, sent in the request's `assets` under a reference string.
+
+    The client sends it base64-encoded in the JSON body, which makes it about a
+    third larger on the wire. Resizing is the caller's job: the API rejects a side
+    under 280 or over 1568 pixels rather than scaling it.
+    """
+
+    data: bytes
+    format: str
+
+    def __post_init__(self) -> None:
+        self.format = self.format.lower()
+        if self.format not in IMAGE_FORMATS:
+            raise ValueError(f"an image is png or jpg, got {self.format!r}")
+        if not self.data:
+            raise ValueError("an image needs data, got 0 bytes")
+        if len(self.data) > MAX_IMAGE_BYTES:
+            raise ValueError(
+                f"an image is at most {MAX_IMAGE_BYTES} bytes, got {len(self.data)}"
+            )
+
+    def as_payload(self) -> dict[str, Any]:
+        return {
+            "type": "image",
+            "format": self.format,
+            "data_base64": base64.b64encode(self.data).decode("ascii"),
+        }
 
 
 @dataclass(slots=True)
@@ -139,7 +188,27 @@ class ScoreAnswer:
         return self.score / top
 
 
-Answer = NoulAnswer | ChoiceAnswer | ScoreAnswer
+@dataclass(slots=True)
+class BoxAnswer:
+    """The four edges of the target, each a fraction of the image from 0 to 1.
+
+    `left` and `right` are fractions of the width, `top` and `bottom` of the height,
+    measured from the top-left corner.
+    """
+
+    top: float
+    bottom: float
+    left: float
+    right: float
+    confidence: float
+
+    @property
+    def value(self) -> tuple[float, float, float, float]:
+        """The edges as (left, top, right, bottom), the order Pillow crops in."""
+        return (self.left, self.top, self.right, self.bottom)
+
+
+Answer = NoulAnswer | ChoiceAnswer | ScoreAnswer | BoxAnswer
 
 
 @dataclass(slots=True)
@@ -182,6 +251,15 @@ def parse_answer(key: str, raw: Mapping[str, Any]) -> Answer:
                 probabilities={
                     str(k): float(v) for k, v in raw["probabilities"].items()
                 },
+                confidence=float(raw["confidence"]),
+            )
+        if kind == "box":
+            edges = raw["box"]
+            return BoxAnswer(
+                top=float(edges["top"]),
+                bottom=float(edges["bottom"]),
+                left=float(edges["left"]),
+                right=float(edges["right"]),
                 confidence=float(raw["confidence"]),
             )
     except (KeyError, TypeError, ValueError) as err:

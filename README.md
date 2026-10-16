@@ -29,15 +29,63 @@ async def main():
 asyncio.run(main())
 ```
 
-## Three question types
+## Four question types
 
 | Type | Ask it | You get back |
 |---|---|---|
 | `Noul` | a yes/no question | `noul`, the probability the answer is yes |
 | `Choice` | pick one of your options | `choice`, `probabilities`, `confidence` |
 | `Score` | rate against ordered levels | `score`, `legend`, `probabilities`, `confidence` |
+| `Box` | where something is in an image | `top`, `bottom`, `left`, `right`, `confidence` |
 
 A `Noul` carries no confidence, because the probability is the whole answer.
+
+## Images
+
+Pass images in `assets`, keyed by a reference string, and write the reference where
+the image belongs: in the state, an instruction or a criterion.
+
+```python
+import uuid
+from jevclient import Box, Image, JevClient, Noul
+
+door = str(uuid.uuid4())
+async with JevClient("your-api-key", model="jev-1.14.0") as jev:
+    answers = await jev.ask(
+        {"door": door},
+        {
+            "parcel": Noul("Is there a parcel in `door`?"),
+            "where": Box("the parcel in `door`"),
+        },
+        assets={door: Image(open("door.jpg", "rb").read(), "jpg")},
+    )
+print(answers["parcel"].noul)   # 0.93
+print(answers["where"].value)   # (0.59, 0.19, 0.79, 0.5), left top right bottom
+```
+
+- The client sends the `TypeSafe-Danger-Zone-Images: true` header on a request with
+  an image or a `Box`, and on no other.
+- `Box` needs Jev 1.14 (`jev-1.14.0` or `jev-preview`). On `jev-1.13.0` the API
+  answers 400. Images work on both.
+- An asset no string refers to is refused locally. The API would answer 400.
+- Resize first. The API rejects a side under 280 or over 1568 pixels instead of
+  scaling it: a 1920 x 1080 frame comes back 400.
+
+An image is billed as input tokens. Measured on 2026-10-16 against `jev-1.14.0`, the
+image part of a request was `2 x ceil(width / 28) x ceil(height / 28)` tokens at
+every size tried:
+
+| image | tokens for the image |
+|---|---|
+| 280 x 280 | 200 |
+| 300 x 301 | 242 |
+| 784 x 588 | 1,176 |
+| 1000 x 750 | 1,944 |
+| 1568 x 1176 | 4,704 |
+| 1568 x 1568 | 6,272 |
+
+Each place a reference appears adds the image again, so put an image several
+questions use in the state once.
 
 ## What one call costs
 
@@ -86,12 +134,14 @@ JevClient("", base_url="http://gateway.local:8093", model="systemone-small")
 
 ## Errors
 
-`JevAuthError` (401), `JevValidationError` (422), `JevRateLimitError` (429, carries
-`retry_after`), `JevOverloadedError` (529) and `JevConnectionError`, all deriving
-from `JevError`. There is no internal retry loop, so the caller decides the policy.
+`JevAuthError` (401), `JevValidationError` (400, 413, 422), `JevRateLimitError`
+(429, carries `retry_after`), `JevOverloadedError` (529) and `JevConnectionError`,
+all deriving from `JevError`. An error from an HTTP answer carries its `status`.
+There is no internal retry loop, so the caller decides the policy.
 
-A `Choice` with fewer than two options and a `Score` with fewer than two levels are
-refused locally, before a request is spent on a 422.
+A `Choice` with fewer than two options, a `Score` with fewer than two levels, and an
+image that is not PNG or JPEG, is empty or is over 16 MiB are refused locally,
+before a request is spent on them.
 
 ## Not affiliated with TypeSafe
 

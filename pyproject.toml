@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "jevclient"
-version = "1.2.0"
+version = "1.3.0"
 description = "Async client for TypeSafe Jev, the System One decision model"
 readme = "README.md"
 requires-python = ">=3.12"
@@ -12,6 +12,9 @@ license = "MIT"
 authors = [{ name = "Colin de Vries", email = "colin@cdevries.dev" }]
 keywords = ["typesafe", "jev", "system one", "classification", "async"]
 dependencies = ["aiohttp>=3.9"]
+
+[project.optional-dependencies]
+test = ["pytest", "pytest-asyncio"]
 
 [project.urls]
 Homepage = "https://github.com/AboveColin/jevclient"
