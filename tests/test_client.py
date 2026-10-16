@@ -178,3 +178,48 @@ async def test_other_statuses_keep_their_message_and_carry_the_status(server) ->
         with pytest.raises(JevRateLimitError) as limited:
             await jev.ask("state", {"q": Noul("Is it?")})
     assert limited.value.status == 429
+
+
+@pytest.mark.parametrize(
+    ("body", "message"),
+    [
+        # TypeSafe, 2026-10-16.
+        (
+            '{"detail":{"error_type":"api_usage_error","message":"Invalid request."}}',
+            "Invalid request.",
+        ),
+        # OpenRouter, 2026-10-16.
+        (
+            '{"error":{"message":"Missing Authentication header","code":401}}',
+            "Missing Authentication header",
+        ),
+        ('{"detail": "Not Found"}', "Not Found"),
+        # No message to take, so the body is the most there is to show.
+        ('{"error":{"message":"","code":400}}', '{"error":{"message":"","code":400}}'),
+        ('{"detail": [{"loc": ["body"]}]}', '{"detail": [{"loc": ["body"]}]}'),
+        ("<html>bad gateway</html>", "<html>bad gateway</html>"),
+    ],
+)
+async def test_an_error_names_the_api_message_not_its_json(
+    server, body, message
+) -> None:
+    recorder, url = server
+    recorder.status = 400
+    recorder.reply = body
+    async with JevClient("key", base_url=url) as jev:
+        with pytest.raises(JevValidationError) as err:
+            await jev.ask("state", {"q": Noul("Is it?")})
+    assert str(err.value) == f"the request was rejected as invalid: {message}"
+
+
+async def test_the_status_prefix_stays_for_callers_that_read_it(server) -> None:
+    """HA-Jev's config flow tells a wrong address by "HTTP 404" at the start."""
+    recorder, url = server
+    recorder.status = 404
+    recorder.reply = (
+        '{"error": {"message": "No endpoint found matching /v1/systemone"}}'
+    )
+    async with JevClient("key", base_url=url) as jev:
+        with pytest.raises(JevResponseError) as err:
+            await jev.ask("state", {"q": Noul("Is it?")})
+    assert str(err.value) == "HTTP 404: No endpoint found matching /v1/systemone"
