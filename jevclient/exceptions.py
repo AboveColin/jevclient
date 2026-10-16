@@ -6,7 +6,15 @@ Every HTTP status the API documents maps to its own class, so callers can retry 
 
 
 class JevError(Exception):
-    """Base class for every error this library raises."""
+    """Base class for every error this library raises.
+
+    `status` is the HTTP status the API answered with, and None when the request
+    never got an answer or the answer could not be read.
+    """
+
+    def __init__(self, message: str, *, status: int | None = None) -> None:
+        super().__init__(message)
+        self.status = status
 
 
 class JevConnectionError(JevError):
@@ -18,14 +26,24 @@ class JevAuthError(JevError):
 
 
 class JevValidationError(JevError):
-    """HTTP 422. The request was malformed; the message names the field at fault."""
+    """HTTP 400, 413 or 422. The API refused the request as it was written.
+
+    The message carries the API's own reason, such as "Unknown model: jev-nope" or
+    "Invalid image dimensions". 413 is a request over a size limit.
+    """
 
 
 class JevRateLimitError(JevError):
     """HTTP 429. Back off before retrying."""
 
-    def __init__(self, message: str, retry_after: float | None = None) -> None:
-        super().__init__(message)
+    def __init__(
+        self,
+        message: str,
+        retry_after: float | None = None,
+        *,
+        status: int | None = 429,
+    ) -> None:
+        super().__init__(message, status=status)
         self.retry_after = retry_after
 
 
