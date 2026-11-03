@@ -10,6 +10,8 @@ from .client import JevClient
 from .const import (
     DEFAULT_BASE_URL,
     DEFAULT_MODEL,
+    IMAGE_FORMAT_ASSETS,
+    IMAGE_FORMAT_OLLAMA,
     IMAGES_HEADER,
     MAX_CHOICE_OPTIONS,
     MAX_IMAGE_BYTES,
@@ -46,12 +48,14 @@ from .models import (
     Usage,
 )
 
-__version__ = "1.3.1"
+__version__ = "1.4.0"
 
 __all__ = [
     "DEFAULT_BASE_URL",
     "DEFAULT_MODEL",
     "IMAGES_HEADER",
+    "IMAGE_FORMAT_ASSETS",
+    "IMAGE_FORMAT_OLLAMA",
     "MAX_CHOICE_OPTIONS",
     "MAX_IMAGE_BYTES",
     "MAX_IMAGE_SIDE",
