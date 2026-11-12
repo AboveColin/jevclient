@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import base64
 import json
+import re
 import time
 from collections.abc import Mapping
 from typing import Any, Self
@@ -243,15 +244,18 @@ def _put_images_in_ollama_format(
     placeholder is the documented form, and it keeps the reference out of the text
     the model reads.
     """
-    # Longest first, so a reference that is part of a longer one is not cut into it.
-    refs = sorted(assets, key=len, reverse=True)
     placeholders = {ref: f"[image {n}]" for n, ref in enumerate(assets, start=1)}
+    # One pass over the text, so a placeholder already written is never matched by a
+    # later reference: replacing one reference at a time turned "2 1" into
+    # "[image [image 2]] [image 2]". Longest first, so a reference that is part of a
+    # longer one is not cut into it.
+    pattern = re.compile(
+        "|".join(re.escape(ref) for ref in sorted(assets, key=len, reverse=True))
+    )
 
     def replace(value: Any) -> Any:
         if isinstance(value, str):
-            for ref in refs:
-                value = value.replace(ref, placeholders[ref])
-            return value
+            return pattern.sub(lambda match: placeholders[match.group()], value)
         if isinstance(value, Mapping):
             return {key: replace(item) for key, item in value.items()}
         if isinstance(value, list | tuple):

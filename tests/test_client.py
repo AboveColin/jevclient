@@ -123,6 +123,26 @@ async def test_ollama_replaces_a_longer_reference_whole(server) -> None:
     assert len(recorder.body["images"]) == 2
 
 
+@pytest.mark.parametrize(
+    ("refs", "state"),
+    [
+        (["2", "1"], "[image 1] [image 2]"),
+        (["a", "i"], "[image 1] [image 2]"),
+        (["door", "g"], "[image 1] [image 2]"),
+    ],
+)
+async def test_ollama_never_replaces_inside_a_placeholder(server, refs, state) -> None:
+    """A reference that also occurs in "[image N]" leaves the placeholders alone."""
+    recorder, url = server
+    async with JevClient("", base_url=url, image_format="ollama") as jev:
+        await jev.ask(
+            " ".join(refs),
+            {"q": Noul("Is it?")},
+            assets={ref: Image(JPEG, "jpg") for ref in refs},
+        )
+    assert recorder.body["state"] == state
+
+
 async def test_ollama_leaves_a_text_request_as_it_was(server) -> None:
     recorder, url = server
     async with JevClient("", base_url=url, image_format="ollama") as jev:
