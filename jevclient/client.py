@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import base64
 import json
+import re
 import time
 from collections.abc import Mapping
 from typing import Any, Self
@@ -13,6 +15,8 @@ from .const import (
     DEFAULT_BASE_URL,
     DEFAULT_MODEL,
     DEFAULT_TIMEOUT,
+    IMAGE_FORMAT_ASSETS,
+    IMAGE_FORMAT_OLLAMA,
     IMAGES_HEADER,
     SYSTEMONE_PATH,
 )
@@ -40,6 +44,10 @@ class JevClient:
     3 questions took 712 ms and 100 took 714 ms, so batching questions into one
     call is close to free in time. It is not free in money, because question text
     is billed as input tokens.
+
+    `image_format` is how a request carries its images: "assets" for TypeSafe and
+    the endpoints that copy it, "ollama" for Ollama's /v1/systemone. Ollama ignores
+    `assets` without an error, so there the model answers as if it saw no image.
     """
 
     def __init__(
@@ -50,7 +58,14 @@ class JevClient:
         base_url: str = DEFAULT_BASE_URL,
         timeout: float = DEFAULT_TIMEOUT,
         model: str = DEFAULT_MODEL,
+        image_format: str = IMAGE_FORMAT_ASSETS,
     ) -> None:
+        if image_format not in (IMAGE_FORMAT_ASSETS, IMAGE_FORMAT_OLLAMA):
+            raise ValueError(
+                f"image_format is {IMAGE_FORMAT_ASSETS!r} or {IMAGE_FORMAT_OLLAMA!r}, "
+                f"got {image_format!r}"
+            )
+        self._image_format = image_format
         self._api_key = api_key
         self._base_url = base_url.rstrip("/")
         self._model = model
@@ -97,6 +112,10 @@ class JevClient:
         again and is billed again, so put an image several questions use in the
         state once. A random UUID per image is the safest reference: the API
         matches it as plain text, so "cat" would also match inside "category".
+
+        With `image_format="ollama"` the images go once each, in `assets` order, in
+        a top-level `images` list, and every reference is written as "[image N]",
+        its place in that list. Write the request the same way for both formats.
         """
         if not questions:
             raise ValueError("ask() needs at least one question")
@@ -108,9 +127,12 @@ class JevClient:
         }
         if assets:
             _check_references(payload, assets)
-            payload["assets"] = {
-                ref: image.as_payload() for ref, image in assets.items()
-            }
+            if self._image_format == IMAGE_FORMAT_OLLAMA:
+                _put_images_in_ollama_format(payload, assets)
+            else:
+                payload["assets"] = {
+                    ref: image.as_payload() for ref, image in assets.items()
+                }
         images = bool(assets) or any(isinstance(q, Box) for q in questions.values())
         session = await self._get_session()
         started = time.monotonic()
@@ -209,6 +231,42 @@ def _check_references(payload: Mapping[str, Any], assets: Mapping[str, Image]) -
             "every asset must be referenced in the state, an instruction or a "
             f"criterion; not found: {missing[:10]}"
         )
+
+
+def _put_images_in_ollama_format(
+    payload: dict[str, Any], assets: Mapping[str, Image]
+) -> None:
+    """Send the images as Ollama's list, and point each reference at its place in it.
+
+    Ollama takes `images` as base64 strings shared by every question and names them
+    "[image N]" in the text. Measured on 2026-11-03 (Ollama 0.40.13, clef:27b), the
+    answer was the same whether the reference stayed or became "[image N]"; the
+    placeholder is the documented form, and it keeps the reference out of the text
+    the model reads.
+    """
+    placeholders = {ref: f"[image {n}]" for n, ref in enumerate(assets, start=1)}
+    # One pass over the text, so a placeholder already written is never matched by a
+    # later reference: replacing one reference at a time turned "2 1" into
+    # "[image [image 2]] [image 2]". Longest first, so a reference that is part of a
+    # longer one is not cut into it.
+    pattern = re.compile(
+        "|".join(re.escape(ref) for ref in sorted(assets, key=len, reverse=True))
+    )
+
+    def replace(value: Any) -> Any:
+        if isinstance(value, str):
+            return pattern.sub(lambda match: placeholders[match.group()], value)
+        if isinstance(value, Mapping):
+            return {key: replace(item) for key, item in value.items()}
+        if isinstance(value, list | tuple):
+            return [replace(item) for item in value]
+        return value
+
+    payload["state"] = replace(payload["state"])
+    payload["questions"] = replace(payload["questions"])
+    payload["images"] = [
+        base64.b64encode(image.data).decode("ascii") for image in assets.values()
+    ]
 
 
 def _strings(value: Any) -> list[str]:

@@ -31,3 +31,11 @@ MIN_IMAGE_SIDE: Final = 280
 MAX_IMAGE_SIDE: Final = 1568
 MAX_IMAGE_BYTES: Final = 16 * 1024 * 1024
 IMAGE_FORMATS: Final = frozenset({"png", "jpg", "jpeg"})
+
+# How a request carries its images. TypeSafe takes them in `assets`, keyed by the
+# reference written in the text. Ollama's /v1/systemone (docs.ollama.com/api/systemone)
+# takes a list of base64 strings in `images`, shared by every question, and answers
+# a request with `assets` as if it had no image: no error, the image's tokens never
+# counted (measured 2026-11-03 against Ollama 0.40.13, clef:27b and clef-flash:9b).
+IMAGE_FORMAT_ASSETS: Final = "assets"
+IMAGE_FORMAT_OLLAMA: Final = "ollama"

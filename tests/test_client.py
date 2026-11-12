@@ -84,6 +84,82 @@ async def test_an_image_goes_in_assets_with_the_header(server) -> None:
     }
 
 
+async def test_ollama_takes_images_as_a_list_and_names_them_by_place(server) -> None:
+    recorder, url = server
+    async with JevClient("", base_url=url, image_format="ollama") as jev:
+        await jev.ask(
+            {"cameras": [{"name": "Door", "image": "ref-door"}]},
+            {
+                "parcel": Noul("Is there a parcel in ref-door?"),
+                "same": Choice(
+                    "Which camera matches?", {"yard": "ref-yard", "none": "Neither"}
+                ),
+            },
+            assets={"ref-door": Image(JPEG, "jpg"), "ref-yard": Image(b"png!", "png")},
+        )
+    assert "assets" not in recorder.body
+    assert recorder.body["images"] == [
+        base64.b64encode(JPEG).decode(),
+        base64.b64encode(b"png!").decode(),
+    ]
+    assert recorder.body["state"] == {
+        "cameras": [{"name": "Door", "image": "[image 1]"}]
+    }
+    assert recorder.body["questions"]["parcel"]["instructions"] == (
+        "Is there a parcel in [image 1]?"
+    )
+    assert recorder.body["questions"]["same"]["criteria"]["yard"] == "[image 2]"
+
+
+async def test_ollama_replaces_a_longer_reference_whole(server) -> None:
+    recorder, url = server
+    async with JevClient("", base_url=url, image_format="ollama") as jev:
+        await jev.ask(
+            "ref-1 then ref-10",
+            {"q": Noul("Is it?")},
+            assets={"ref-1": Image(JPEG, "jpg"), "ref-10": Image(JPEG, "jpg")},
+        )
+    assert recorder.body["state"] == "[image 1] then [image 2]"
+    assert len(recorder.body["images"]) == 2
+
+
+@pytest.mark.parametrize(
+    ("refs", "state"),
+    [
+        (["2", "1"], "[image 1] [image 2]"),
+        (["a", "i"], "[image 1] [image 2]"),
+        (["door", "g"], "[image 1] [image 2]"),
+    ],
+)
+async def test_ollama_never_replaces_inside_a_placeholder(server, refs, state) -> None:
+    """A reference that also occurs in "[image N]" leaves the placeholders alone."""
+    recorder, url = server
+    async with JevClient("", base_url=url, image_format="ollama") as jev:
+        await jev.ask(
+            " ".join(refs),
+            {"q": Noul("Is it?")},
+            assets={ref: Image(JPEG, "jpg") for ref in refs},
+        )
+    assert recorder.body["state"] == state
+
+
+async def test_ollama_leaves_a_text_request_as_it_was(server) -> None:
+    recorder, url = server
+    async with JevClient("", base_url=url, image_format="ollama") as jev:
+        await jev.ask("state", {"q": Noul("Is it?")})
+    assert recorder.body == {
+        "state": "state",
+        "model": "jev-latest",
+        "questions": {"q": {"type": "noul", "instructions": "Is it?"}},
+    }
+    assert "Authorization" not in recorder.headers
+
+
+def test_an_unknown_image_format_is_refused() -> None:
+    with pytest.raises(ValueError, match="'assets' or 'ollama'"):
+        JevClient("", image_format="openai")
+
+
 async def test_a_box_question_alone_turns_the_header_on(server) -> None:
     recorder, url = server
     recorder.reply = {
